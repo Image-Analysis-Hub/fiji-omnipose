@@ -6,7 +6,6 @@ import javax.swing.UnsupportedLookAndFeelException;
 import ij.IJ;
 import ij.ImageJ;
 import ij.ImagePlus;
-import ij.plugin.frame.Recorder;
 
 public class OmniposeFijiPluginDemo
 {
@@ -24,14 +23,15 @@ public class OmniposeFijiPluginDemo
 			ij.Menus.getCommands().put( "Omnipose", "fiji.plugin.appose.omnipose.OmniposePlugin" );
 
 			// Switch on macro recorder.
-			new Recorder();
+//			new Recorder();
 
 //			final String filePath = "../imglib2-omnipose/samples/20230331_washed_XY1.ome-1_stabilized_cropped-t61.tif";
 			final String filePath = "../imglib2-omnipose/samples/20230331_washed_XY1.ome-1_stabilized_cropped.tif";
 			final ImagePlus imp = IJ.openImage( filePath );
 			imp.show();
 
-			new OmniposePlugin().run( "" );
+			new OmniposePluginFrame().run( "" );
+//			new OmniposePlugin().run( "" );
 		}
 		catch ( final Exception e )
 		{

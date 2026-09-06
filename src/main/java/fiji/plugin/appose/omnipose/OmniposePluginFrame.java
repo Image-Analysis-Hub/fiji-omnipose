@@ -1,6 +1,10 @@
 package fiji.plugin.appose.omnipose;
 
 import static fiji.plugin.appose.ApposeUtils.addROIs;
+import static fiji.plugin.appose.ApposeUtils.clearOutsideRoi;
+import static fiji.plugin.appose.ApposeUtils.getAxisInfo;
+import static fiji.plugin.appose.ApposeUtils.rawWraps;
+import static fiji.plugin.appose.ApposeUtils.transferCalibration;
 
 import java.awt.Color;
 import java.awt.Rectangle;
@@ -10,6 +14,7 @@ import org.apposed.appose.BuildException;
 import org.apposed.appose.TaskException;
 import org.scijava.command.Previewable;
 import org.scijava.ui.config.fiji.ConfigFijiPluginFrame;
+import org.scijava.ui.config.visitors.gui.FrameBuilder.ConfigFrame;
 import org.scijava.ui.config.visitors.gui.FrameBuilder.ConfigFrame.Progress;
 
 import fiji.plugin.appose.listeners.FijiApposeProgressListener;
@@ -18,11 +23,20 @@ import ij.ImagePlus;
 import ij.gui.Roi;
 import ij.plugin.Duplicator;
 import ij.plugin.frame.RoiManager;
+import net.imagej.ImgPlus;
 import net.imglib2.appose.util.ApposeTaskListener;
+import net.imglib2.appose.util.AxisInfo;
+import net.imglib2.img.Img;
+import net.imglib2.omnipose.OmniposeOutput;
 import net.imglib2.omnipose.OmniposeParameters;
+import net.imglib2.omnipose.OmniposeRunner2;
+import net.imglib2.type.numeric.integer.UnsignedByteType;
+import net.imglib2.type.numeric.integer.UnsignedShortType;
 
 public class OmniposePluginFrame extends ConfigFijiPluginFrame< OmniposeConfig > implements Previewable
 {
+
+	private OmniposeRunner2 runner;
 
 	protected OmniposeParameters toParams( final OmniposeConfig config )
 	{
@@ -31,12 +45,13 @@ public class OmniposePluginFrame extends ConfigFijiPluginFrame< OmniposeConfig >
 
 		final OmniposeParameters params = OmniposeParameters.builder()
 				.model( isBuiltin ? config.builtinModel().getValue() : null )
-				.customModel( isBuiltin ? null :  config.customModel().getValue() )
+				.customModel( isBuiltin ? null : config.customModel().getValue() )
 				.diameter( config.diameter().getValue() )
 				.channels( config.channel().getValue(), 0 )
 				.minSize( config.minSize().getValue() )
 				.normalize( config.normalize().getValue() )
-				.resample( true ) // Must be true here, as we expect the output to have the same size as the input.
+				.resample( true ) // Must be true here, as we expect the output
+									// to have the same size as the input.
 				.maskThreshold( config.maskThreshold().getValue() )
 				.flowThreshold( config.flowThreshold().getValue() )
 				.tileOverlap( config.tileOverlap().getValue() )
@@ -59,9 +74,70 @@ public class OmniposePluginFrame extends ConfigFijiPluginFrame< OmniposeConfig >
 		return new OmniposeConfig( nChannels, pixelSize, units );
 	}
 
+	@SuppressWarnings( "unchecked" )
 	protected ImagePlus[] exec( final ImagePlus imp, final OmniposeParameters params, final ApposeTaskListener listener ) throws BuildException, IOException, InterruptedException, TaskException
 	{
-		return Omnipose.omnipose( imp, params, listener );
+		if ( runner == null )
+		{
+			runner = OmniposeRunner2.create( listener, params.torchVersion );
+			runner.init();
+		}
+
+		// Wrap ImagePlus.
+		Roi initialRoi = imp.getRoi();
+		if ( initialRoi != null )
+			initialRoi = ( Roi ) initialRoi.clone();
+		@SuppressWarnings( "rawtypes" )
+		final ImgPlus input = rawWraps( imp );
+		final AxisInfo inputAxes = getAxisInfo( input );
+
+		// Exec.
+		runner.setInput( input, inputAxes );
+		runner.run( params );
+
+		// Process outputs.
+		final OmniposeOutput< UnsignedShortType > outputs;
+		final Img< UnsignedShortType > labels = runner.getOutputLabels();
+		clearOutsideRoi( labels, initialRoi );
+		if ( params.computeFlows )
+		{
+			final Img< UnsignedByteType > flows = runner.getOutputFlows();
+			clearOutsideRoi( flows, initialRoi );
+			outputs = new OmniposeOutput<>(
+					labels,
+					inputAxes.removeChannelDim(),
+					flows,
+					( inputAxes.C() < 0 ) ? inputAxes.insertChannelDim( 2 ) : inputAxes );
+		}
+		else
+		{
+			outputs = new OmniposeOutput<>( labels, inputAxes.removeChannelDim() );
+		}
+
+		final ImagePlus[] imps = Omnipose.toImp( outputs );
+		for ( final ImagePlus out : imps )
+			transferCalibration( imp, out, initialRoi );
+		imps[ 0 ].setTitle( imp.getTitle() + "_Omnipose" );
+		if ( params.computeFlows )
+			imps[ 1 ].setTitle( imp.getTitle() + "_flows_Omnipose" );
+		return imps;
+	}
+
+	@Override
+	protected ConfigFrame showUI()
+	{
+		final ConfigFrame frame = super.showUI();
+		// Close the runner when the frame is closed.
+		frame.addWindowListener( new java.awt.event.WindowAdapter()
+		{
+			@Override
+			public void windowClosed( final java.awt.event.WindowEvent e )
+			{
+				if ( runner != null )
+					runner.close();
+			}
+		} );
+		return frame;
 	}
 
 	@Override
