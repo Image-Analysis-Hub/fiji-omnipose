@@ -109,7 +109,7 @@
 		<dependency>
 			<groupId>org.scijava</groupId>
 			<artifactId>config-ui-fiji</artifactId>
-			<version>0.0.2</version>
+			<version>0.0.3-SNAPSHOT</version>
 		</dependency>
 
 	</dependencies>
