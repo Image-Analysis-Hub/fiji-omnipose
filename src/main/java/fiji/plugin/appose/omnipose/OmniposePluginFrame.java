@@ -29,14 +29,14 @@ import net.imglib2.appose.util.AxisInfo;
 import net.imglib2.img.Img;
 import net.imglib2.omnipose.OmniposeOutput;
 import net.imglib2.omnipose.OmniposeParameters;
-import net.imglib2.omnipose.OmniposeRunner2;
+import net.imglib2.omnipose.OmniposeRunner;
 import net.imglib2.type.numeric.integer.UnsignedByteType;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
 
 public class OmniposePluginFrame extends ConfigFijiPluginFrame< OmniposeConfig > implements Previewable
 {
 
-	private OmniposeRunner2 runner;
+	private OmniposeRunner runner;
 
 	protected OmniposeParameters toParams( final OmniposeConfig config )
 	{
@@ -79,7 +79,7 @@ public class OmniposePluginFrame extends ConfigFijiPluginFrame< OmniposeConfig >
 	{
 		if ( runner == null )
 		{
-			runner = OmniposeRunner2.create( listener, params.torchVersion );
+			runner = OmniposeRunner.create( listener, params.torchVersion );
 			runner.init();
 		}
 
