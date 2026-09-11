@@ -26,11 +26,9 @@ import ij.plugin.frame.RoiManager;
 import net.imagej.ImgPlus;
 import net.imglib2.appose.util.ApposeTaskListener;
 import net.imglib2.appose.util.AxisInfo;
-import net.imglib2.img.Img;
 import net.imglib2.omnipose.OmniposeOutput;
 import net.imglib2.omnipose.OmniposeParameters;
 import net.imglib2.omnipose.OmniposeRunner;
-import net.imglib2.type.numeric.integer.UnsignedByteType;
 import net.imglib2.type.numeric.integer.UnsignedShortType;
 
 public class OmniposePluginFrame extends ConfigFijiPluginFrame< OmniposeConfig > implements Previewable
@@ -96,23 +94,10 @@ public class OmniposePluginFrame extends ConfigFijiPluginFrame< OmniposeConfig >
 		runner.run( params );
 
 		// Process outputs.
-		final OmniposeOutput< UnsignedShortType > outputs;
-		final Img< UnsignedShortType > labels = runner.getOutputLabels();
-		clearOutsideRoi( labels, initialRoi );
+		final OmniposeOutput< UnsignedShortType > outputs = runner.getOutput();
+		clearOutsideRoi( outputs.labels, initialRoi );
 		if ( params.computeFlows )
-		{
-			final Img< UnsignedByteType > flows = runner.getOutputFlows();
-			clearOutsideRoi( flows, initialRoi );
-			outputs = new OmniposeOutput<>(
-					labels,
-					inputAxes.removeChannelDim(),
-					flows,
-					( inputAxes.C() < 0 ) ? inputAxes.insertChannelDim( 2 ) : inputAxes );
-		}
-		else
-		{
-			outputs = new OmniposeOutput<>( labels, inputAxes.removeChannelDim() );
-		}
+			clearOutsideRoi( outputs.flows, initialRoi );
 
 		final ImagePlus[] imps = Omnipose.toImp( outputs );
 		for ( final ImagePlus out : imps )
