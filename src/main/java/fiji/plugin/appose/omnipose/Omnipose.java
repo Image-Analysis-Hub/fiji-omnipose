@@ -1,10 +1,10 @@
 package fiji.plugin.appose.omnipose;
 
-import static fiji.plugin.appose.ApposeUtils.clearOutsideRoi;
 import static fiji.plugin.appose.ApposeUtils.getAxisInfo;
 import static fiji.plugin.appose.ApposeUtils.rawWraps;
-import static fiji.plugin.appose.ApposeUtils.transferCalibration;
-import static fiji.plugin.appose.ApposeUtils.useGlasbeyDarkLUT;
+import static org.scijava.ui.config.fiji.PostProcessUtils.clearOutsideRoi;
+import static org.scijava.ui.config.fiji.PostProcessUtils.transferCalibration;
+import static org.scijava.ui.config.fiji.PostProcessUtils.useGlasbeyDarkLUT;
 
 import java.io.IOException;
 
@@ -35,22 +35,24 @@ public class Omnipose
 			final OmniposeParameters params,
 			final ApposeTaskListener listener ) throws BuildException, IOException, InterruptedException, TaskException
 	{
-		Roi initialRoi = imp.getRoi();
-		if ( initialRoi != null )
-			initialRoi = ( Roi ) initialRoi.clone();
+		// Execute Omnipose.
 		final ImgPlus input = rawWraps( imp );
 		final AxisInfo inputAxes = getAxisInfo( input );
 		final OmniposeOutput outputs = net.imglib2.omnipose.Omnipose.omnipose( input, inputAxes, params, listener );
-		clearOutsideRoi( outputs.labels, initialRoi );
-		if ( params.computeFlows )
-			clearOutsideRoi( outputs.flows, initialRoi );
 
+		// Post-processing: transfer calibration and clear outside ROI.
 		final ImagePlus[] imps = toImp( outputs );
 		for ( final ImagePlus out : imps )
-			transferCalibration( imp, out, initialRoi );
-		imps[ 0 ].setTitle( imp.getTitle() + "_Cellpose-3" );
+		{
+			Roi inputRoi = imp.getRoi();
+			if ( inputRoi != null )
+				inputRoi = ( Roi ) inputRoi.clone();
+			transferCalibration( imp, out, inputRoi );
+			clearOutsideRoi( out, inputRoi );
+		}
+		imps[ 0 ].setTitle( imp.getTitle() + "_Omnipose" );
 		if ( params.computeFlows )
-			imps[ 1 ].setTitle( imp.getTitle() + "_flows_Cellpose-3" );
+			imps[ 1 ].setTitle( imp.getTitle() + "_flows_Omnipose" );
 		return imps;
 	}
 

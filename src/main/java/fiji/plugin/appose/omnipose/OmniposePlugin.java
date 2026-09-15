@@ -1,12 +1,7 @@
 package fiji.plugin.appose.omnipose;
 
-import static fiji.plugin.appose.ApposeUtils.addROIs;
-import static fiji.plugin.appose.ApposeUtils.clearOutsideRoi;
 import static fiji.plugin.appose.ApposeUtils.getAxisInfo;
 import static fiji.plugin.appose.ApposeUtils.rawWraps;
-import static fiji.plugin.appose.ApposeUtils.transferCalibration;
-
-import java.awt.Color;
 
 import org.scijava.ui.config.fiji.ConfigFijiPluginPreviewable;
 import org.scijava.ui.config.visitors.gui.FrameBuilder.ConfigFrame;
@@ -15,7 +10,6 @@ import fiji.plugin.appose.listeners.FijiApposeProgressListener;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.Roi;
-import ij.plugin.frame.RoiManager;
 import net.imagej.ImgPlus;
 import net.imglib2.appose.util.AxisInfo;
 import net.imglib2.omnipose.OmniposeOutput;
@@ -69,11 +63,11 @@ public class OmniposePlugin extends ConfigFijiPluginPreviewable< OmniposeConfig 
 
 	@SuppressWarnings( "unchecked" )
 	@Override
-	protected void process( final ImagePlus imp, final int tOrigin )
+	protected void process( final ImagePlus input, final int tOrigin )
 	{
 		progress.clear();
 		final long startTime = System.currentTimeMillis();
-		// Store the roi in the source image for later.
+		// Store the ROI in the source image for later.
 		final Roi roi = imp.getRoi();
 
 		try
@@ -90,48 +84,46 @@ public class OmniposePlugin extends ConfigFijiPluginPreviewable< OmniposeConfig 
 				previousTorchVersion = params.torchVersion;
 			}
 
-			// Wrap input.
-			Roi initialRoi = imp.getRoi();
+			// ROI in the input. Might be different from the roi in the source
+			// image, if this is a preview.
+			Roi initialRoi = input.getRoi();
 			if ( initialRoi != null )
 				initialRoi = ( Roi ) initialRoi.clone();
+
+			// Wrap input.
 			@SuppressWarnings( "rawtypes" )
-			final ImgPlus input = rawWraps( imp );
-			final AxisInfo inputAxes = getAxisInfo( input );
+			final ImgPlus img = rawWraps( input );
+			final AxisInfo inputAxes = getAxisInfo( img );
 
 			// Exec.
-			runner.setInput( input, inputAxes );
+			runner.setInput( img, inputAxes );
 			runner.run( params );
 			final OmniposeOutput< ? > oo = runner.getOutput();
 
 			final long endTime1 = System.currentTimeMillis();
 			progress.message( String.format( "Omnipose done in %.1f seconds. Postprocessing outputs...",
-					( endTime1 - startTime ) / 1000.0 ) );
-
-			// Clear outside of the ROI, if any.
-			clearOutsideRoi( oo.labels, initialRoi );
-			if ( oo.flows != null )
-				clearOutsideRoi( oo.flows, initialRoi );
+					( endTime1 - startTime ) / 1000. ) );
 
 			// To ImagePlus.
 			final ImagePlus[] outputs = Omnipose.toImp( oo );
 
-			// Reposition the outputs.
+			// Post-process the outputs.
 			for ( final ImagePlus out : outputs )
-				transferCalibration( imp, out, initialRoi );
+				postProcessOuput( input, out );
 
 			// Unwrap the outputs and show them.
 			final ImagePlus labels = outputs[ 0 ];
-			if ( config.exportROIs().getValue() && imp.getNSlices() == 1 )
-			{
-				final boolean multipleChannels = imp.getNChannels() > 1;
-				addROIs( labels, config.getName(), Color.YELLOW, tOrigin, multipleChannels );
-				RoiManager.getInstance2().runCommand( "Show All" );
-			}
+			if ( config.exportROIs().getValue() )
+				toROIs( input, labels, config.getName(), tOrigin );
 			if ( config.exportLabels().getValue() )
+			{
+				labels.setTitle( imp.getTitle() + "_Omnipose" );
 				labels.show();
+			}
 			if ( config.exportFlows().getValue() && outputs.length > 1 )
 			{
 				final ImagePlus flows = outputs[ 1 ];
+				flows.setTitle( imp.getTitle() + "_flows_Omnipose" );
 				flows.show();
 			}
 		}
@@ -141,11 +133,11 @@ public class OmniposePlugin extends ConfigFijiPluginPreviewable< OmniposeConfig 
 		}
 		finally
 		{
-			// Restore the roi in the source image.
+			// Restore the ROI in the source image.
 			imp.setRoi( roi );
 			progress.clear();
 			final long endTime2 = System.currentTimeMillis();
-			progress.message( String.format( "Done in %.1f seconds.", ( endTime2 - startTime ) / 1000.0 ) );
+			progress.message( String.format( "Done in %.1f seconds.", ( endTime2 - startTime ) / 1000. ) );
 		}
 	}
 
