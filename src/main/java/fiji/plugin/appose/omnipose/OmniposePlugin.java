@@ -15,6 +15,8 @@ import net.imglib2.appose.util.AxisInfo;
 import net.imglib2.omnipose.OmniposeOutput;
 import net.imglib2.omnipose.OmniposeParameters;
 import net.imglib2.omnipose.OmniposeRunner;
+import net.imglib2.omnipose.OmniposeRunnerWrapper;
+import net.imglib2.type.numeric.integer.UnsignedShortType;
 
 public class OmniposePlugin extends ConfigFijiPluginPreviewable< OmniposeConfig >
 {
@@ -96,9 +98,24 @@ public class OmniposePlugin extends ConfigFijiPluginPreviewable< OmniposeConfig 
 			final AxisInfo inputAxes = getAxisInfo( img );
 
 			// Exec.
-			runner.setInput( img, inputAxes );
-			runner.run( params );
-			final OmniposeOutput< ? > oo = runner.getOutput();
+			final long nt = inputAxes.nTimePoints( img );
+			final long nz = inputAxes.nZ( img );
+			final OmniposeOutput< UnsignedShortType > oo;
+			final UnsignedShortType outputType = new UnsignedShortType();
+			if ( nt > 1 && nz > 1 )
+			{
+				// Do we have a 5D image? If yes we process time-point by
+				// time-point.
+				final OmniposeRunnerWrapper wrapper = new OmniposeRunnerWrapper( runner, d -> progress.set( d ) );
+				oo = wrapper.run( img, inputAxes, outputType, params );
+			}
+			else
+			{
+				// Otherwise process in one go.
+				runner.setInput( img, inputAxes, outputType );
+				runner.run( params );
+				oo = runner.getOutput();
+			}
 
 			final long endTime1 = System.currentTimeMillis();
 			progress.message( String.format( "Omnipose done in %.1f seconds. Postprocessing outputs...",
